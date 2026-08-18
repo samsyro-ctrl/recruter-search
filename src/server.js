@@ -1,4 +1,6 @@
 import express from 'express';
+import session from 'express-session';
+import bcrypt from 'bcrypt';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { spawn } from 'child_process';
@@ -91,6 +93,12 @@ function checkRateLimit(ip, maxPerMinute = 5) {
 // ========== MIDDLEWARE ==========
 
 app.use(express.static('public'));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'recruter-secret-key-change-in-prod',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, maxAge: 86400000 } // 24h
+}));
 app.use((req, res, next) => {
   req.body = '';
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
@@ -102,13 +110,85 @@ app.use((req, res, next) => {
   req.on('end', next);
 });
 
+// ========== AUTH MIDDLEWARE ==========
+
+function requireAuth(req, res, next) {
+  if (req.session.userId) return next();
+  res.status(401).json({ eroare: 'Trebuie să te autentifici.' });
+}
+
 // ========== ROUTES ==========
+
+app.post('/register', async (req, res) => {
+  try {
+    const d = obiect(req.body);
+    if (!d) return res.status(400).json({ eroare: 'JSON invalid.' });
+
+    const username = text(d.username, 100);
+    const password = text(d.password, 200);
+    const email = text(d.email, 200);
+
+    if (!username || !password) {
+      return res.status(400).json({ eroare: 'Username și password sunt obligatorii.' });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    const id = await db.createUser(username, hash, email || null);
+
+    if (!id) {
+      return res.status(400).json({ eroare: 'Username deja folosit.' });
+    }
+
+    req.session.userId = id;
+    req.session.username = username;
+    res.json({ success: true, message: 'Binevenit!' });
+  } catch (e) {
+    console.error('Register error:', e.message);
+    res.status(500).json({ eroare: 'Eroare la înregistrare.' });
+  }
+});
+
+app.post('/login', async (req, res) => {
+  try {
+    const d = obiect(req.body);
+    if (!d) return res.status(400).json({ eroare: 'JSON invalid.' });
+
+    const username = text(d.username, 100);
+    const password = text(d.password, 200);
+
+    if (!username || !password) {
+      return res.status(400).json({ eroare: 'Username și password sunt obligatorii.' });
+    }
+
+    const user = await db.getUserByUsername(username);
+    if (!user) {
+      return res.status(401).json({ eroare: 'Username sau password incorect.' });
+    }
+
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ eroare: 'Username sau password incorect.' });
+    }
+
+    req.session.userId = user.id;
+    req.session.username = user.username;
+    res.json({ success: true, message: 'Binevenit!' });
+  } catch (e) {
+    console.error('Login error:', e.message);
+    res.status(500).json({ eroare: 'Eroare la autentificare.' });
+  }
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ success: true });
+});
 
 app.get('/', (req, res) => {
   res.send(genereazaPagina());
 });
 
-app.post('/cauta', async (req, res) => {
+app.post('/cauta', requireAuth, async (req, res) => {
   try {
     const ip = req.ip || '0.0.0.0';
 

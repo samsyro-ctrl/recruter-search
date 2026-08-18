@@ -45,6 +45,16 @@ export class Database {
           FOREIGN KEY(cautare_id) REFERENCES cautari(id)
         );
       `);
+
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(100) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
       console.log('✓ Database tables initialized');
     } catch (err) {
       console.error('DB init error:', err);
@@ -108,6 +118,32 @@ export class Database {
       await this.pool.query(`ALTER TABLE ${tabel} ADD COLUMN ${coloana} ${definitie}`);
     } catch (err) {
       // Ignore if column exists
+    }
+  }
+
+  async createUser(username, passwordHash, email) {
+    try {
+      const result = await this.pool.query(
+        `INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3) RETURNING id`,
+        [username, passwordHash, email]
+      );
+      return result.rows[0]?.id || null;
+    } catch (err) {
+      console.error('User creation error:', err);
+      return null;
+    }
+  }
+
+  async getUserByUsername(username) {
+    try {
+      const result = await this.pool.query(
+        `SELECT id, username, password_hash, email FROM users WHERE username = $1`,
+        [username]
+      );
+      return result.rows[0] || null;
+    } catch (err) {
+      console.error('User lookup error:', err);
+      return null;
     }
   }
 
