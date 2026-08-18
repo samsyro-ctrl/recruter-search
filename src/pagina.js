@@ -4,7 +4,7 @@ export function genereazaPagina() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Recruter — Căutare Constructori</title>
+  <title>Recruter — O echipă, un utilaj, materiale, un specialist, o echipă de service</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
@@ -65,7 +65,7 @@ export function genereazaPagina() {
 <body>
   <div class="container">
     <div class="search-panel">
-      <input type="text" id="intrebare" placeholder="Caut un installer de gaze în Buzău..." autocomplete="off">
+      <input type="text" id="intrebare" placeholder="O echipă, un utilaj, materiale, un specialist, o echipă de service — zi-mi ce ai nevoie și unde..." autocomplete="off">
 
       <div id="clarificare" class="clarificare">
         <h3 id="clarif-intrebare">Ce fel?</h3>
