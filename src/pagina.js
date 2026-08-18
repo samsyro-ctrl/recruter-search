@@ -39,10 +39,18 @@ export function genereazaPagina() {
     .rezultat p { font-size: 13px; color: #666; margin: 4px 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
     .istoria { margin-top: 20px; }
-    .istoric-item { background: white; padding: 12px; margin-bottom: 8px; border-radius: 4px; cursor: pointer; border-left: 3px solid #ccc; }
+    .istoric-item { background: white; padding: 12px; margin-bottom: 8px; border-radius: 4px; cursor: pointer; border-left: 3px solid #ccc; user-select: none; }
     .istoric-item:hover { background: #fafafa; }
-    .istoric-item .titlu { font-weight: 500; font-size: 14px; }
-    .istoric-item .descriere { font-size: 12px; color: #999; margin-top: 4px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .istoric-item .titlu { font-weight: 500; font-size: 14px; pointer-events: none; }
+    .istoric-item .descriere { font-size: 12px; color: #999; margin-top: 4px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; pointer-events: none; }
+    .modal-confirmare { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; }
+    .modal-confirmare.show { display: flex; align-items: center; justify-content: center; }
+    .modal-box { background: white; padding: 20px; border-radius: 8px; max-width: 400px; }
+    .modal-box h3 { margin-bottom: 12px; }
+    .modal-box .buttons { display: flex; gap: 8px; margin-top: 16px; }
+    .modal-box button { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; }
+    .btn-confirm { background: #2196F3; color: white; }
+    .btn-cancel { background: #ccc; color: #333; }
 
     .btn-cautare { width: 100%; padding: 12px; margin-top: 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
     .btn-cautare:hover { background: #1976D2; }
@@ -76,11 +84,15 @@ export function genereazaPagina() {
         <div class="email-recipients" id="email-recipients-list"></div>
       </div>
 
-      <div id="zona-cautare" class="zona-info" style="display: none;">
-        <strong>🔍 Caut în:</strong>
-        <div id="zona-levels"></div>
-        <label style="margin-top: 8px;">
-          <input type="checkbox" id="doar-locatia"> Numai locația specificată
+      <div id="zona-cautare" class="zona-info" style="display: block;">
+        <strong>🔍 Zone de căutare:</strong>
+        <div id="zona-levels" style="margin: 8px 0; font-size: 13px;">
+          <div class="zona-nivel exact">• Locația cerută (exact)</div>
+          <div class="zona-nivel">• Orașe din acelaşi judeţ</div>
+          <div class="zona-nivel neighboring">• Județe vecine (doar dacă nimic găsit)</div>
+        </div>
+        <label style="margin-top: 8px; font-size: 13px;">
+          <input type="checkbox" id="doar-locatia"> Cauta numai în locația specificată
         </label>
       </div>
 
@@ -91,9 +103,38 @@ export function genereazaPagina() {
     <div id="istoria" class="istoria"></div>
   </div>
 
+  <div id="modal-confirmare" class="modal-confirmare">
+    <div class="modal-box">
+      <h3>Repornesti aceasta cautare?</h3>
+      <p id="modal-text" style="color: #666; font-size: 14px;"></p>
+      <div class="buttons">
+        <button class="btn-confirm" id="btn-confirm">Da</button>
+        <button class="btn-cancel" id="btn-cancel">Anuleaza</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // TEST 4: History readonly + checksums
+    // TEST 4: History readonly + checksums + logging
     const savedAddresses = JSON.parse(localStorage.getItem('savedEmails') || '[]');
+
+    // Simple checksum function
+    function checksum(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+      }
+      return Math.abs(hash).toString(16);
+    }
+
+    // Click logging
+    function logClick(id, intrebare) {
+      const log = JSON.parse(localStorage.getItem('clickLog') || '[]');
+      log.push({ id, intrebare, timestamp: new Date().toISOString() });
+      localStorage.setItem('clickLog', JSON.stringify(log.slice(-50)));
+    }
 
     document.getElementById('trimite-email').addEventListener('change', e => {
       document.getElementById('email-principal').style.display = e.target.checked ? 'block' : 'none';
@@ -152,19 +193,53 @@ export function genereazaPagina() {
       panel.classList.add('show');
     }
 
-    async function loadRezultate(id) {
+    async function loadRezultateWithParams(id, doarLocal = false) {
+      const url = doarLocal
+        ? \`/rezultate?q=\${id}&doarLocal=true\`
+        : \`/rezultate?q=\${id}\`;
+      await loadRezultate(id, url);
+    }
+
+    async function loadRezultate(id, url = null) {
+      if (!url) url = \`/rezultate?q=\${id}\`;
       try {
-        const res = await fetch(\`/rezultate?q=\${id}\`);
-        const firme = await res.json();
+        const res = await fetch(url);
+        const data = await res.json();
 
         const container = document.getElementById('rezultate');
-        container.innerHTML = firme.map(f =>
-          \`<div class="rezultat" readonly>
+
+        if (!data.rezultate || data.rezultate.length === 0) {
+          container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">Niciun rezultat gasit.</p>';
+          return;
+        }
+
+        const firme = data.rezultate;
+        const nivelHeaders = {
+          0: '📍 Locația cerută',
+          1: '🏙️ Orașe în același județ',
+          2: '📍 Județul',
+          3: '🔔 Județe vecine'
+        };
+
+        let html = '';
+        let currentNivel = -1;
+
+        firme.forEach(f => {
+          if (f.nivel_loc !== currentNivel) {
+            if (currentNivel !== -1) html += '</div>';
+            html += \`<div style="margin-top: 16px;"><h4 style="font-size: 13px; color: #666; margin-bottom: 8px;">\${nivelHeaders[f.nivel_loc] || 'Rezultate'}</h4>\`;
+            currentNivel = f.nivel_loc;
+          }
+
+          html += \`<div class="rezultat" readonly>
              <h4>\${escapeHtml(f.nume)}</h4>
              <p>\${escapeHtml(f.descriere)}</p>
-             <p><small>\${escapeHtml(f.oras)}, \${escapeHtml(f.judet)} — Nivel: \${f.nivel_loc}</small></p>
-           </div>\`
-        ).join('');
+             <p><small>\${escapeHtml(f.oras)}, \${escapeHtml(f.judet)}</small></p>
+           </div>\`;
+        });
+
+        if (currentNivel !== -1) html += '</div>';
+        container.innerHTML = html;
       } catch (e) {
         console.error(e);
       }
@@ -175,6 +250,71 @@ export function genereazaPagina() {
       div.textContent = text;
       return div.innerHTML;
     }
+
+    // Load history on page load
+    async function loadHistory() {
+      try {
+        const res = await fetch('/historia');
+        const cautari = await res.json();
+
+        const container = document.getElementById('istoria');
+        if (!cautari.length) {
+          container.innerHTML = '';
+          return;
+        }
+
+        container.innerHTML = '<h3 style="margin-bottom: 12px; color: #666;">Ultimele cautari</h3>' +
+          cautari.map(c => {
+            const cs = checksum(c.intrebare + c.id);
+            return \`
+              <div class="istoric-item" data-id="\${c.id}" data-intrebare="\${escapeHtml(c.intrebare)}" data-checksum="\${cs}">
+                <div class="titlu">\${escapeHtml(c.intrebare.slice(0, 50))}\${c.intrebare.length > 50 ? '...' : ''}</div>
+                <div class="descriere">\${escapeHtml(c.intrebare)}</div>
+              </div>
+            \`;
+          }).join('');
+
+        // Attach readonly click handlers
+        document.querySelectorAll('.istoric-item').forEach(item => {
+          item.addEventListener('click', e => {
+            const id = item.getAttribute('data-id');
+            const intrebare = item.getAttribute('data-intrebare');
+            const storedChecksum = item.getAttribute('data-checksum');
+
+            // Verify checksum
+            const computed = checksum(intrebare + id);
+            if (storedChecksum !== computed) {
+              alert('⚠️ Datele au fost modificate. Anulare.');
+              logClick(id, 'SUSPICIOUS_CHECKSUM_MISMATCH');
+              return;
+            }
+
+            // Show confirmation
+            document.getElementById('modal-text').textContent = intrebare;
+            document.getElementById('modal-confirmare').classList.add('show');
+
+            document.getElementById('btn-confirm').onclick = async () => {
+              document.getElementById('intrebare').value = intrebare;
+              document.getElementById('modal-confirmare').classList.remove('show');
+              logClick(id, intrebare);
+
+              // Load results from history
+              const doarLocal = document.getElementById('doar-locatia').checked;
+              loadRezultateWithParams(id, doarLocal);
+            };
+
+            document.getElementById('btn-cancel').onclick = () => {
+              document.getElementById('modal-confirmare').classList.remove('show');
+            };
+          });
+        });
+      } catch (e) {
+        console.error('History load error:', e);
+      }
+    }
+
+    // Load on startup
+    loadHistory();
   </script>
 </body>
 </html>`;

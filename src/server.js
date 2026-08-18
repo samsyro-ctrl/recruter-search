@@ -208,12 +208,17 @@ app.post('/cauta', async (req, res) => {
 app.get('/rezultate', (req, res) => {
   try {
     const q = text(req.query.q, 500);
-    if (!q) return res.json([]);
+    const doarLocal = req.query.doarLocal === 'true';
+
+    if (!q) return res.json({ rezultate: [] });
 
     const firme = db.firmeFromSearch(q);
     const ordonat = db.dupaZona(firme, q);
 
-    res.json(ordonat);
+    // Filter by nivel if doar local
+    const filtrate = doarLocal ? ordonat.filter(f => f.nivel_loc === 0) : ordonat;
+
+    res.json({ rezultate: filtrate });
   } catch (e) {
     res.status(500).json({ eroare: 'Eroare la preluare rezultate.' });
   }
