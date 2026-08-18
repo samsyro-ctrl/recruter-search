@@ -1,0 +1,16 @@
+{
+  "name": "recruter-search",
+  "version": "1.0.0",
+  "description": "PWA for construction worker & service search in Romania",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node test/proba.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.3",
+    "express": "^4.19.2",
+    "better-sqlite3": "^9.2.2"
+  }
+}
