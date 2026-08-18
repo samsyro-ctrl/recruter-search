@@ -1,0 +1,19 @@
+[Unit]
+Description=Recruter Search - Construction Worker Finder PWA
+After=network.target
+
+[Service]
+Type=simple
+User=recruter
+WorkingDirectory=/opt/recruter-search
+ExecStart=/usr/bin/node /opt/recruter-search/src/server.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+Environment="ALERTA_EMAIL=samsyro@gmail.com"
+
+[Install]
+WantedBy=multi-user.target
