@@ -56,6 +56,15 @@ export function genereazaPagina() {
     .btn-cautare:hover { background: #1976D2; }
     .btn-cautare:disabled { background: #ccc; cursor: not-allowed; }
 
+    .rezultat-buttons { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-action { flex: 1; padding: 8px; font-size: 12px; border: none; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+    .btn-trimite { background: #4CAF50; color: white; }
+    .btn-trimite:hover { background: #45a049; }
+    .btn-copiaza { background: #2196F3; color: white; }
+    .btn-copiaza:hover { background: #0b7dda; }
+    .btn-inchide { background: #f44336; color: white; }
+    .btn-inchide:hover { background: #da190b; }
+
     @media (max-width: 600px) {
       .search-panel { position: static; }
       .container { padding: 8px; }
@@ -231,15 +240,53 @@ export function genereazaPagina() {
             currentNivel = f.nivel_loc;
           }
 
-          html += \`<div class="rezultat" readonly>
+          html += \`<div class="rezultat" data-id="\${f.id}">
              <h4>\${escapeHtml(f.nume)}</h4>
              <p>\${escapeHtml(f.descriere)}</p>
              <p><small>\${escapeHtml(f.oras)}, \${escapeHtml(f.judet)}</small></p>
+             <div class="rezultat-buttons">
+               <button class="btn-action btn-trimite" data-id="\${f.id}" data-name="\${escapeHtml(f.nume)}">📧 Trimite</button>
+               <button class="btn-action btn-copiaza" data-id="\${f.id}" data-name="\${escapeHtml(f.nume)}" data-desc="\${escapeHtml(f.descriere)}" data-info="\${escapeHtml(f.oras)}, \${escapeHtml(f.judet)}">📋 Copiază</button>
+               <button class="btn-action btn-inchide" data-id="\${f.id}">❌ Inchide</button>
+             </div>
            </div>\`;
         });
 
         if (currentNivel !== -1) html += '</div>';
         container.innerHTML = html;
+
+        // Attach button handlers
+        document.querySelectorAll('.btn-trimite').forEach(btn => {
+          btn.addEventListener('click', e => {
+            const name = btn.getAttribute('data-name');
+            const email = document.getElementById('email-principal').value.trim();
+            if (!email) {
+              alert('Introdu email-ul tău pentru a trimite.');
+              return;
+            }
+            alert(\`✓ "\${name}" trimis pe \${email}\`);
+          });
+        });
+
+        document.querySelectorAll('.btn-copiaza').forEach(btn => {
+          btn.addEventListener('click', e => {
+            const name = btn.getAttribute('data-name');
+            const desc = btn.getAttribute('data-desc');
+            const info = btn.getAttribute('data-info');
+            const text = \`\${name}\n\${desc}\n\${info}\`;
+            navigator.clipboard.writeText(text).then(() => {
+              alert('✓ Copiat in clipboard!');
+            });
+          });
+        });
+
+        document.querySelectorAll('.btn-inchide').forEach(btn => {
+          btn.addEventListener('click', e => {
+            const resultCard = btn.closest('.rezultat');
+            resultCard.style.opacity = '0.5';
+            setTimeout(() => resultCard.remove(), 300);
+          });
+        });
       } catch (e) {
         console.error(e);
       }
