@@ -4,6 +4,13 @@ export function genereazaPagina() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="O echipă, un utilaj, materiale, un specialist, o echipă de service. Zi-mi ce ai nevoie și unde, să caut aproape de tine.">
+  <meta name="theme-color" content="#ff6b00">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Recruter">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23ff6b00' width='192' height='192'/><text x='96' y='120' font-size='80' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial'>R</text></svg>">
   <title>Recruter — O echipă, un utilaj, materiale, un specialist, o echipă de service</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -130,6 +137,13 @@ export function genereazaPagina() {
   </div>
 
   <script>
+    // PWA: Register Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => console.log('✓ Service Worker registered'))
+        .catch(err => console.log('Service Worker registration failed:', err));
+    }
+
     // TEST 4: History readonly + checksums + logging
     const savedAddresses = JSON.parse(localStorage.getItem('savedEmails') || '[]');
 
