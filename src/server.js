@@ -178,6 +178,14 @@ app.post('/logout', (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/auth-status', (req, res) => {
+  if (req.session.userId && req.session.username) {
+    res.json({ username: req.session.username });
+  } else {
+    res.status(401).json({ eroare: 'Nu ești autentificat.' });
+  }
+});
+
 app.get('/', (req, res) => {
   res.send(genereazaPagina());
 });

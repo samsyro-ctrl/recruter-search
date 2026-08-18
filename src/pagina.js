@@ -72,6 +72,24 @@ export function genereazaPagina() {
     .btn-inchide { background: #f44336; color: white; }
     .btn-inchide:hover { background: #da190b; }
 
+    .header { background: white; padding: 12px 16px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 18px; color: #ff6b00; }
+    .header-user { display: flex; align-items: center; gap: 12px; }
+    .user-badge { font-size: 13px; color: #666; }
+    .btn-logout { padding: 6px 12px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-logout:hover { background: #da190b; }
+
+    .auth-panel { display: none; max-width: 400px; margin: 40px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .auth-panel.show { display: block; }
+    .auth-panel h2 { font-size: 20px; margin-bottom: 20px; color: #333; }
+    .auth-panel input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .auth-panel button { width: 100%; padding: 12px; background: #ff6b00; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-bottom: 12px; }
+    .auth-panel button:hover { background: #e55a00; }
+    .auth-toggle { text-align: center; font-size: 13px; color: #666; margin-top: 16px; }
+    .auth-toggle a { color: #ff6b00; cursor: pointer; text-decoration: underline; }
+    .auth-error { color: #d32f2f; font-size: 13px; margin-bottom: 12px; }
+    .auth-loading { display: none; }
+
     @media (max-width: 600px) {
       .search-panel { position: static; }
       .container { padding: 8px; }
@@ -79,14 +97,38 @@ export function genereazaPagina() {
   </style>
 </head>
 <body>
-  <div class="container">
-    <div style="background: #fff3cd; padding: 20px; margin-bottom: 16px; border-radius: 4px; border-left: 4px solid #ff6b00;">
-      <h2 style="font-size: 18px; margin-bottom: 8px; color: #333;">Ce iti trebuie?</h2>
-      <p style="font-size: 14px; color: #555; line-height: 1.6;">
-        O echipă, un utilaj, materiale, un specialist, o echipă de service. <strong style="color: #ff6b00;">Zi-mi ce ai nevoie și unde</strong>, să caut aproape de tine.
-      </p>
+  <div class="header">
+    <h1>Recruter</h1>
+    <div class="header-user" id="header-user" style="display: none;">
+      <span class="user-badge">👤 <span id="username-display"></span></span>
+      <button class="btn-logout" id="btn-logout">Ieșire</button>
     </div>
-    <div class="search-panel">
+  </div>
+
+  <div class="container">
+    <!-- Auth Panel -->
+    <div class="auth-panel" id="auth-panel">
+      <h2 id="auth-title">Conectare</h2>
+      <div class="auth-error" id="auth-error" style="display: none;"></div>
+      <input type="text" id="auth-username" placeholder="Utilizator" autocomplete="username">
+      <input type="password" id="auth-password" placeholder="Parolă" autocomplete="current-password">
+      <input type="email" id="auth-email" placeholder="Email (doar pentru înregistrare)" autocomplete="email" style="display: none;">
+      <button id="auth-submit">Conectare</button>
+      <div class="auth-loading" id="auth-loading">Se încarcă...</div>
+      <div class="auth-toggle">
+        <span id="auth-toggle-text">Nu ai cont? <a id="auth-toggle-link">Creează cont</a></span>
+      </div>
+    </div>
+
+    <!-- Search Panel (hidden until logged in) -->
+    <div id="search-container" style="display: none;">
+      <div style="background: #fff3cd; padding: 20px; margin-bottom: 16px; border-radius: 4px; border-left: 4px solid #ff6b00;">
+        <h2 style="font-size: 18px; margin-bottom: 8px; color: #333;">Ce iti trebuie?</h2>
+        <p style="font-size: 14px; color: #555; line-height: 1.6;">
+          O echipă, un utilaj, materiale, un specialist, o echipă de service. <strong style="color: #ff6b00;">Zi-mi ce ai nevoie și unde</strong>, să caut aproape de tine.
+        </p>
+      </div>
+      <div class="search-panel">
       <input type="text" id="intrebare" placeholder="O echipă, un utilaj, materiale, un specialist, o echipă de service — zi-mi ce ai nevoie și unde..." autocomplete="off">
 
       <div id="clarificare" class="clarificare">
@@ -322,6 +364,10 @@ export function genereazaPagina() {
     async function loadHistory() {
       try {
         const res = await fetch('/historia');
+        if (!res.ok) {
+          console.log('History not available (not logged in)');
+          return;
+        }
         const cautari = await res.json();
 
         const container = document.getElementById('istoria');
@@ -380,9 +426,126 @@ export function genereazaPagina() {
       }
     }
 
-    // Load on startup
-    loadHistory();
+    // ========== AUTH MANAGEMENT ==========
+    let isLoginMode = true;
+
+    const authPanel = document.getElementById('auth-panel');
+    const searchContainer = document.getElementById('search-container');
+    const headerUser = document.getElementById('header-user');
+    const authToggleLink = document.getElementById('auth-toggle-link');
+    const authSubmitBtn = document.getElementById('auth-submit');
+    const authUsername = document.getElementById('auth-username');
+    const authPassword = document.getElementById('auth-password');
+    const authEmail = document.getElementById('auth-email');
+    const authError = document.getElementById('auth-error');
+    const authTitle = document.getElementById('auth-title');
+    const authToggleText = document.getElementById('auth-toggle-text');
+
+    // Check if already logged in
+    async function checkAuth() {
+      try {
+        const res = await fetch('/auth-status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.username) {
+            showSearchPanel(data.username);
+            return true;
+          }
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function showSearchPanel(username) {
+      authPanel.classList.remove('show');
+      authPanel.style.display = 'none';
+      searchContainer.style.display = 'block';
+      headerUser.style.display = 'flex';
+      document.getElementById('username-display').textContent = username;
+      loadHistory();
+    }
+
+    function showAuthPanel() {
+      searchContainer.style.display = 'none';
+      headerUser.style.display = 'none';
+      authPanel.style.display = 'block';
+      authPanel.classList.add('show');
+    }
+
+    function handleToggle(e) {
+      e.preventDefault();
+      isLoginMode = !isLoginMode;
+      if (isLoginMode) {
+        authTitle.textContent = 'Conectare';
+        authSubmitBtn.textContent = 'Conectare';
+        authEmail.style.display = 'none';
+        authToggleText.innerHTML = 'Nu ai cont? <a id="auth-toggle-link">Creează cont</a>';
+      } else {
+        authTitle.textContent = 'Creează cont';
+        authSubmitBtn.textContent = 'Înregistrare';
+        authEmail.style.display = 'block';
+        authToggleText.innerHTML = 'Ai deja cont? <a id="auth-toggle-link">Conectează-te</a>';
+      }
+      authError.style.display = 'none';
+      authError.textContent = '';
+      document.getElementById('auth-toggle-link').addEventListener('click', handleToggle);
+    }
+    authToggleLink.addEventListener('click', handleToggle);
+
+    authSubmitBtn.addEventListener('click', async () => {
+      const username = authUsername.value.trim();
+      const password = authPassword.value.trim();
+      const email = authEmail.value.trim();
+
+      if (!username || !password) {
+        authError.textContent = 'Completează utilizator și parolă.';
+        authError.style.display = 'block';
+        return;
+      }
+
+      const endpoint = isLoginMode ? '/login' : '/register';
+      const payload = { username, password };
+      if (!isLoginMode) payload.email = email || null;
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          authError.textContent = data.eroare || 'Eroare necunoscută.';
+          authError.style.display = 'block';
+          return;
+        }
+
+        // Success
+        showSearchPanel(username);
+      } catch (e) {
+        authError.textContent = 'Eroare de conectare: ' + e.message;
+        authError.style.display = 'block';
+      }
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+      await fetch('/logout', { method: 'POST' });
+      authUsername.value = '';
+      authPassword.value = '';
+      authEmail.value = '';
+      isLoginMode = true;
+      showAuthPanel();
+    });
+
+    // Check auth on load
+    checkAuth().then(isLoggedIn => {
+      if (!isLoggedIn) {
+        showAuthPanel();
+      }
+    });
   </script>
+    </div>
 </body>
 </html>`;
 }
