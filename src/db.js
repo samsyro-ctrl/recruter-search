@@ -5,7 +5,7 @@ export class Database {
   constructor(config = {}) {
     this.pool = new Pool({
       user: config.user || 'postgres',
-      password: config.password || 'postgres123',
+      password: config.password || 'test123',
       host: config.host || 'localhost',
       port: config.port || 5432,
       database: config.database || 'recruter_db'
