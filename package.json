@@ -11,6 +11,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
     "express": "^4.19.2",
-    "better-sqlite3": "^9.2.2"
+    "pg": "^8.11.3"
   }
 }

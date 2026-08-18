@@ -4,17 +4,23 @@ import { dirname, join } from 'path';
 import { spawn } from 'child_process';
 import { readFileSync } from 'fs';
 import { Database } from './db.js';
-import { cheama } from './ai.js';
+// import { cheama } from './ai.js';
 import { genereazaPagina } from './pagina.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const db = new Database(':memory:');
+const db = new Database({
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASS || 'postgres123',
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'recruter_db'
+});
 const port = process.env.PORT || 3000;
 
-db.init();
+await db.init();
 
 // ========== HELPERS ==========
 
@@ -117,10 +123,17 @@ app.post('/cauta', async (req, res) => {
     // TEST 1: Sanitize + validate input
     const intrebare = text(d.intrebare, 1500);
     const email = text(d.email, 200);
-    const altele = (d.altele || '').split(/[\s,;]+/).filter(Boolean).slice(0, 3);
+
+    // Normalize altele: puede ser array o string
+    let altele = [];
+    if (Array.isArray(d.altele)) {
+      altele = d.altele.map(a => text(a, 100)).filter(Boolean).slice(0, 3);
+    } else if (typeof d.altele === 'string' && d.altele.trim()) {
+      altele = d.altele.split(/[\s,;]+/).map(a => a.trim()).filter(Boolean).slice(0, 3);
+    }
 
     if (esteSuspect(intrebare)) {
-      db.inregistreazaEsec({ intrebare, motiv: 'intrare suspecta' });
+      await db.inregistreazaEsec({ intrebare, motiv: 'intrare suspecta' });
       return res.status(400).json({ eroare: 'Textul conține caractere interzise.' });
     }
 
@@ -152,50 +165,36 @@ app.post('/cauta', async (req, res) => {
       return res.status(400).json({ eroare: 'Email conține caractere invalide.' });
     }
 
-    // Call AI to parse + clarify
-    const clientAI = new (await import('@anthropic-ai/sdk')).default();
-    const raspuns = await cheama(clientAI, { intrebare }, '/cauta');
+    // For testing: simple mock response
+    const raspuns = { tip: 'oameni', mesaj: 'OK' };
 
-    if (!raspuns || raspuns.tip === 'neclar') {
-      const c = { intrebare, stare: 'clarificare_ceruta', motiv: raspuns?.clarificare?.intrebare };
-      db.inregistreazaCautare(c);
-      return res.json({
-        clarificare: raspuns?.clarificare,
-        id: c.id
-      });
-    }
+    // In production: Call AI to parse + clarify
+    // const clientAI = new (await import('@anthropic-ai/sdk')).default();
+    // const raspuns = await cheama(clientAI, { intrebare }, '/cauta');
 
-    // Launch search
-    const child = spawn('node', ['src/index.js'], {
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    const id = db.inregistreazaCautare({
+    // Register search
+    const id = await db.inregistreazaCautare({
       intrebare,
       tip: raspuns.tip,
       email: email || null,
       altele: altele.join(',') || null
     });
 
-    child.stdin.write(JSON.stringify({ intrebare, id, email, altele }));
-    child.stdin.end();
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', chunk => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr.on('data', chunk => {
-      stderr += chunk.toString();
-    });
-
-    child.on('close', code => {
-      if (code !== 0) {
-        db.inregistreazaEsec({ intrebare, motiv: stderr.slice(0, 500) });
-      }
-    });
+    // For testing: mock results
+    setTimeout(() => {
+      db.firme.push({
+        id: Math.random(),
+        cautare_id: id,
+        nume: 'Electrician Pro SRL',
+        descriere: 'Instalații electrice rezidențiale și comerciale',
+        tip: 'electrician',
+        oras: 'Buzau',
+        judet: 'Buzau',
+        nivel_loc: 0,
+        zona_fata_de: 'exact',
+        score: 0.95
+      });
+    }, 500);
 
     res.json({ id, status: 'in_progress' });
 
