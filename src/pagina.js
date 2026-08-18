@@ -73,6 +73,12 @@ export function genereazaPagina() {
 </head>
 <body>
   <div class="container">
+    <div style="background: #fff3cd; padding: 20px; margin-bottom: 16px; border-radius: 4px; border-left: 4px solid #ff6b00;">
+      <h2 style="font-size: 18px; margin-bottom: 8px; color: #333;">Ce iti trebuie?</h2>
+      <p style="font-size: 14px; color: #555; line-height: 1.6;">
+        Serie in cuvintele tale — o echipa, un utilaj, materiale, un specialist, o echipa de service. Caut orice tine de o lucrare. <strong style="color: #ff6b00;">Zi-mi si unde</strong>, ca sa caut aproape de tine.
+      </p>
+    </div>
     <div class="search-panel">
       <input type="text" id="intrebare" placeholder="O echipă, un utilaj, materiale, un specialist, o echipă de service — zi-mi ce ai nevoie și unde..." autocomplete="off">
 
