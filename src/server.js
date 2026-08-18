@@ -13,16 +13,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const db = new Database({
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASS || 'postgres123',
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'recruter_db'
-});
+const db = new Database(':memory:');
 const port = process.env.PORT || 3000;
 
-await db.init();
+db.init();
 
 // ========== HELPERS ==========
 
@@ -213,7 +207,7 @@ app.post('/cauta', requireAuth, async (req, res) => {
     }
 
     if (esteSuspect(intrebare)) {
-      await db.inregistreazaEsec({ intrebare, motiv: 'intrare suspecta' });
+      db.inregistreazaEsec({ intrebare, motiv: 'intrare suspecta' });
       return res.status(400).json({ eroare: 'Textul conține caractere interzise.' });
     }
 
@@ -253,7 +247,7 @@ app.post('/cauta', requireAuth, async (req, res) => {
     // const raspuns = await cheama(clientAI, { intrebare }, '/cauta');
 
     // Register search
-    const id = await db.inregistreazaCautare({
+    const id = db.inregistreazaCautare({
       intrebare,
       tip: raspuns.tip,
       email: email || null,

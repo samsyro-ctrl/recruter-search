@@ -1,100 +1,86 @@
-import pkg from 'pg';
-const { Pool } = pkg;
+import sqlite3 from 'sqlite3';
 
 export class Database {
-  constructor(config = {}) {
-    this.pool = new Pool({
-      user: config.user || 'postgres',
-      password: config.password || 'test123',
-      host: config.host || 'localhost',
-      port: config.port || 5432,
-      database: config.database || 'recruter_db'
+  constructor(path = ':memory:') {
+    this.db = new sqlite3.Database(path, err => {
+      if (err) console.error('DB init error:', err);
     });
+    this.db.configure('busyTimeout', 5000);
     this.cautari = [];
     this.firme = [];
   }
 
-  async init() {
-    try {
-      await this.pool.query(`
-        CREATE TABLE IF NOT EXISTS cautari (
-          id SERIAL PRIMARY KEY,
-          intrebare TEXT,
-          tip TEXT,
-          stare TEXT DEFAULT 'in_progres',
-          motiv TEXT,
-          titlu TEXT,
-          email TEXT,
-          altele TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+  init() {
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS cautari (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        intrebare TEXT,
+        tip TEXT,
+        stare TEXT DEFAULT 'in_progres',
+        motiv TEXT,
+        titlu TEXT,
+        email TEXT,
+        altele TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-      await this.pool.query(`
-        CREATE TABLE IF NOT EXISTS firme (
-          id SERIAL PRIMARY KEY,
-          cautare_id INTEGER,
-          nume TEXT,
-          descriere TEXT,
-          tip TEXT,
-          oras TEXT,
-          judet TEXT,
-          nivel_loc INTEGER DEFAULT 0,
-          zona_fata_de TEXT,
-          score REAL,
-          FOREIGN KEY(cautare_id) REFERENCES cautari(id)
-        );
-      `);
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS firme (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cautare_id INTEGER,
+        nume TEXT,
+        descriere TEXT,
+        tip TEXT,
+        oras TEXT,
+        judet TEXT,
+        nivel_loc INTEGER DEFAULT 0,
+        zona_fata_de TEXT,
+        score REAL,
+        FOREIGN KEY(cautare_id) REFERENCES cautari(id)
+      );
+    `);
 
-      await this.pool.query(`
-        CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
-          username VARCHAR(100) UNIQUE NOT NULL,
-          password_hash VARCHAR(255) NOT NULL,
-          email VARCHAR(255) UNIQUE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      console.log('✓ Database tables initialized');
-    } catch (err) {
-      console.error('DB init error:', err);
-    }
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        email TEXT UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✓ Database tables initialized');
   }
 
-  async inregistreazaCautare(c) {
-    try {
-      const id = Math.floor(Math.random() * 1000000);
-      this.cautari.push({
-        id,
-        intrebare: c.intrebare,
-        tip: c.tip || 'oameni',
-        stare: c.stare || 'in_progres',
-        email: c.email || null,
-        altele: c.altele || null,
-        created_at: new Date().toISOString()
-      });
+  inregistreazaCautare(c) {
+    const id = Math.floor(Math.random() * 1000000);
+    this.cautari.push({
+      id,
+      intrebare: c.intrebare,
+      tip: c.tip || 'oameni',
+      stare: c.stare || 'in_progres',
+      email: c.email || null,
+      altele: c.altele || null,
+      created_at: new Date().toISOString()
+    });
 
-      await this.pool.query(
-        `INSERT INTO cautari (intrebare, tip, stare, email, altele) VALUES ($1, $2, $3, $4, $5)`,
-        [c.intrebare, c.tip || 'oameni', c.stare || 'in_progres', c.email, c.altele]
-      );
+    this.db.run(
+      `INSERT INTO cautari (intrebare, tip, stare, email, altele) VALUES (?, ?, ?, ?, ?)`,
+      [c.intrebare, c.tip || 'oameni', c.stare || 'in_progres', c.email, c.altele],
+      function(err) {
+        if (!err) this.lastID = id;
+      }
+    );
 
-      return id;
-    } catch (err) {
-      console.error('Insert error:', err);
-      return null;
-    }
+    return id;
   }
 
-  async inregistreazaEsec(c) {
-    try {
-      await this.pool.query(
-        `INSERT INTO cautari (intrebare, stare, motiv) VALUES ($1, $2, $3)`,
-        [c.intrebare, 'esuat', c.motiv || 'eroare necunoscuta']
-      );
-    } catch (err) {
-      console.error('Error registration failed:', err);
-    }
+  inregistreazaEsec(c) {
+    this.db.run(
+      `INSERT INTO cautari (intrebare, stare, motiv) VALUES (?, ?, ?)`,
+      [c.intrebare, 'esuat', c.motiv || 'eroare necunoscuta']
+    );
   }
 
   ultimeleCautari(limit = 10) {
@@ -113,41 +99,34 @@ export class Database {
     });
   }
 
-  async adaugaColoana(tabel, coloana, definitie) {
-    try {
-      await this.pool.query(`ALTER TABLE ${tabel} ADD COLUMN ${coloana} ${definitie}`);
-    } catch (err) {
+  adaugaColoana(tabel, coloana, definitie) {
+    this.db.run(`ALTER TABLE ${tabel} ADD COLUMN ${coloana} ${definitie}`, err => {
       // Ignore if column exists
-    }
+    });
   }
 
-  async createUser(username, passwordHash, email) {
-    try {
-      const result = await this.pool.query(
-        `INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3) RETURNING id`,
-        [username, passwordHash, email]
+  getUserByUsername(username) {
+    return new Promise((resolve) => {
+      this.db.get(
+        `SELECT id, username, password_hash, email FROM users WHERE username = ?`,
+        [username],
+        (err, row) => {
+          resolve(row || null);
+        }
       );
-      return result.rows[0]?.id || null;
-    } catch (err) {
-      console.error('User creation error:', err);
-      return null;
-    }
+    });
   }
 
-  async getUserByUsername(username) {
-    try {
-      const result = await this.pool.query(
-        `SELECT id, username, password_hash, email FROM users WHERE username = $1`,
-        [username]
+  createUser(username, passwordHash, email) {
+    return new Promise((resolve) => {
+      this.db.run(
+        `INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)`,
+        [username, passwordHash, email],
+        function(err) {
+          if (err) resolve(null);
+          else resolve(this.lastID);
+        }
       );
-      return result.rows[0] || null;
-    } catch (err) {
-      console.error('User lookup error:', err);
-      return null;
-    }
-  }
-
-  async close() {
-    await this.pool.end();
+    });
   }
 }
