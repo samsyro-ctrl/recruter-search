@@ -13,10 +13,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const db = new Database(':memory:');
+const db = new Database();
 const port = process.env.PORT || 3000;
 
-db.init();
+await db.init();
 
 // ========== HELPERS ==========
 
@@ -314,6 +314,8 @@ app.get('/historia', (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Server pe http://localhost:${port}`);
-});
+(async () => {
+  app.listen(port, () => {
+    console.log(`🚀 Server pe http://localhost:${port}`);
+  });
+})();
