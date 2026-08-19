@@ -14,7 +14,7 @@ export function genereazaPagina() {
   <title>Recruter — O echipă, un utilaj, materiale, un specialist, o echipă de service</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a1a; color: #333; }
     .container { max-width: 800px; margin: 0 auto; }
 
     .search-panel { background: white; padding: 16px; border-bottom: 1px solid #e0e0e0; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -79,16 +79,20 @@ export function genereazaPagina() {
     .btn-logout { padding: 6px 12px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
     .btn-logout:hover { background: #da190b; }
 
-    .auth-panel { display: none; max-width: 400px; margin: 40px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .auth-panel { display: none; max-width: 360px; margin: 80px auto; padding: 40px 30px; background: #2a2a2a; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
     .auth-panel.show { display: block; }
-    .auth-panel h2 { font-size: 20px; margin-bottom: 20px; color: #333; }
-    .auth-panel input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-    .auth-panel button { width: 100%; padding: 12px; background: #ff6b00; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-bottom: 12px; }
+    .auth-title-section { text-align: center; margin-bottom: 30px; }
+    .auth-panel h2 { font-size: 28px; margin-bottom: 8px; color: white; font-weight: 600; }
+    .auth-org { font-size: 13px; color: #999; letter-spacing: 0.5px; }
+    .auth-panel input { width: 100%; padding: 12px 14px; margin-bottom: 12px; border: none; border-radius: 6px; font-size: 14px; background: white; color: #333; }
+    .auth-panel input::placeholder { color: #999; }
+    .auth-panel button { width: 100%; padding: 12px; background: #ff6b00; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; margin-bottom: 12px; font-weight: 500; transition: background 0.2s; }
     .auth-panel button:hover { background: #e55a00; }
-    .auth-toggle { text-align: center; font-size: 13px; color: #666; margin-top: 16px; }
-    .auth-toggle a { color: #ff6b00; cursor: pointer; text-decoration: underline; }
-    .auth-error { color: #d32f2f; font-size: 13px; margin-bottom: 12px; }
-    .auth-loading { display: none; }
+    .auth-toggle { text-align: center; font-size: 12px; color: #999; margin-top: 16px; }
+    .auth-toggle a { color: #ff6b00; cursor: pointer; text-decoration: none; }
+    .auth-toggle a:hover { text-decoration: underline; }
+    .auth-error { color: #ff6b6b; font-size: 13px; margin-bottom: 12px; text-align: center; }
+    .auth-loading { display: none; text-align: center; color: #999; }
 
     @media (max-width: 600px) {
       .search-panel { position: static; }
@@ -108,7 +112,10 @@ export function genereazaPagina() {
   <div class="container">
     <!-- Auth Panel -->
     <div class="auth-panel" id="auth-panel">
-      <h2 id="auth-title">Conectare</h2>
+      <div class="auth-title-section">
+        <h2 id="auth-title">Conectare</h2>
+        <div class="auth-org">RECRUTER</div>
+      </div>
       <div class="auth-error" id="auth-error" style="display: none;"></div>
       <input type="text" id="auth-username" placeholder="Utilizator" autocomplete="username">
       <input type="password" id="auth-password" placeholder="Parolă" autocomplete="current-password">
