@@ -10,6 +10,29 @@ const __dirname = dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
+// ========== INIT CONTURI =========
+// Crea conturi dacă nu exista (local + Vercel)
+const CONTURI_DEFAULT = [
+  { utilizator: 'teodora', nume: 'Teodora Deaconu', email: 'teodora.deacon@redpowercons.com', rol: 'manager' },
+  { utilizator: 'bogdan', nume: 'Bogdan Ciobotaru', email: 'bogdan.ciobotaru@redpowercons.com', rol: 'manager' },
+  { utilizator: 'matyas', nume: 'Matyas Sebestien', email: 'matyes.sebestien@redpowercons.com', rol: 'manager' },
+  { utilizator: 'cristian', nume: 'Cristian Samson', email: 'cristian.samson@redpowercons.com', rol: 'manager' },
+  { utilizator: 'daniel', nume: 'Daniel', email: 'daniel@buildandfix.ai', rol: 'manager' },
+];
+
+function initConturi() {
+  const existente = new Set(utilizatori.listeaza().map(u => u.utilizator));
+  for (const cont of CONTURI_DEFAULT) {
+    if (!existente.has(cont.utilizator)) {
+      try {
+        utilizatori.adauga(cont);
+      } catch (e) {
+        console.log(`  ! ${cont.utilizator}: ${e.message}`);
+      }
+    }
+  }
+}
+
 // ========== HELPERS ==========
 
 function text(v, max = 2000) {
@@ -240,5 +263,6 @@ app.get('/api/historia', (req, res) => {
 });
 
 app.listen(port, () => {
+  initConturi();
   console.log(`🚀 Server pe http://localhost:${port}`);
 });
