@@ -8,5 +8,7 @@ node_modules/
 dist/
 build/
 *.log
+utilizatori.json
+test-add-users.js
 
 .vercel

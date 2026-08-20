@@ -84,8 +84,12 @@ export function genereazaPagina() {
     .auth-title-section { text-align: center; margin-bottom: 30px; }
     .auth-panel h2 { font-size: 28px; margin-bottom: 8px; color: white; font-weight: 600; }
     .auth-org { font-size: 13px; color: #999; letter-spacing: 0.5px; }
-    .auth-panel input { width: 100%; padding: 12px 14px; margin-bottom: 12px; border: none; border-radius: 6px; font-size: 14px; background: white; color: #333; }
+    .auth-panel input:not(.password-wrapper input) { width: 100%; padding: 12px 14px; margin-bottom: 12px; border: none; border-radius: 6px; font-size: 14px; background: white; color: #333; box-sizing: border-box; }
     .auth-panel input::placeholder { color: #999; }
+    .password-wrapper { position: relative; margin-bottom: 12px; }
+    .password-wrapper input { width: 100%; padding: 12px 14px; padding-right: 45px; border: none; border-radius: 6px; font-size: 14px; background: white; color: #333; box-sizing: border-box; }
+    .toggle-password { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #333; font-size: 20px; padding: 4px 8px; z-index: 10; }
+    .toggle-password:hover { opacity: 0.7; }
     .auth-panel button { width: 100%; padding: 12px; background: #ff6b00; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; margin-bottom: 12px; font-weight: 500; transition: background 0.2s; }
     .auth-panel button:hover { background: #e55a00; }
     .auth-toggle { text-align: center; font-size: 12px; color: #999; margin-top: 16px; }
@@ -118,13 +122,12 @@ export function genereazaPagina() {
       </div>
       <div class="auth-error" id="auth-error" style="display: none;"></div>
       <input type="text" id="auth-username" placeholder="Utilizator" autocomplete="username">
-      <input type="password" id="auth-password" placeholder="Parolă" autocomplete="current-password">
-      <input type="email" id="auth-email" placeholder="Email (doar pentru înregistrare)" autocomplete="email" style="display: none;">
+      <div class="password-wrapper">
+        <input type="password" id="auth-password" placeholder="Parolă" autocomplete="current-password">
+        <button type="button" class="toggle-password" id="toggle-password">👁️</button>
+      </div>
       <button id="auth-submit">Conectare</button>
       <div class="auth-loading" id="auth-loading">Se încarcă...</div>
-      <div class="auth-toggle">
-        <span id="auth-toggle-text">Nu ai cont? <a id="auth-toggle-link">Creează cont</a></span>
-      </div>
     </div>
 
     <!-- Search Panel (hidden until logged in) -->
@@ -241,7 +244,7 @@ export function genereazaPagina() {
       }
 
       try {
-        const res = await fetch('/cauta', {
+        const res = await fetch('/api/cauta', {
           method: 'POST',
           body: JSON.stringify(payload)
         });
@@ -370,7 +373,7 @@ export function genereazaPagina() {
     // Load history on page load
     async function loadHistory() {
       try {
-        const res = await fetch('/historia');
+        const res = await fetch('/api/historia');
         if (!res.ok) {
           console.log('History not available (not logged in)');
           return;
@@ -434,28 +437,32 @@ export function genereazaPagina() {
     }
 
     // ========== AUTH MANAGEMENT ==========
-    let isLoginMode = true;
-
     const authPanel = document.getElementById('auth-panel');
     const searchContainer = document.getElementById('search-container');
     const headerUser = document.getElementById('header-user');
-    const authToggleLink = document.getElementById('auth-toggle-link');
     const authSubmitBtn = document.getElementById('auth-submit');
     const authUsername = document.getElementById('auth-username');
     const authPassword = document.getElementById('auth-password');
-    const authEmail = document.getElementById('auth-email');
     const authError = document.getElementById('auth-error');
     const authTitle = document.getElementById('auth-title');
-    const authToggleText = document.getElementById('auth-toggle-text');
+    const togglePasswordBtn = document.getElementById('toggle-password');
+
+    // Toggle password visibility
+    togglePasswordBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const type = authPassword.type === 'password' ? 'text' : 'password';
+      authPassword.type = type;
+      togglePasswordBtn.textContent = type === 'password' ? '👁️' : '🙈';
+    });
 
     // Check if already logged in
     async function checkAuth() {
       try {
-        const res = await fetch('/auth-status');
+        const res = await fetch('/api/stare-acces');
         if (res.ok) {
           const data = await res.json();
-          if (data.username) {
-            showSearchPanel(data.username);
+          if (data.autentificat && data.utilizator) {
+            showSearchPanel(data.utilizator.nume || data.utilizator.utilizator);
             return true;
           }
         }
@@ -479,45 +486,20 @@ export function genereazaPagina() {
       authPanel.classList.add('show');
     }
 
-    function handleToggle(e) {
-      e.preventDefault();
-      isLoginMode = !isLoginMode;
-      if (isLoginMode) {
-        authTitle.textContent = 'Conectare';
-        authSubmitBtn.textContent = 'Conectare';
-        authEmail.style.display = 'none';
-        authToggleText.innerHTML = 'Nu ai cont? <a id="auth-toggle-link">Creează cont</a>';
-      } else {
-        authTitle.textContent = 'Creează cont';
-        authSubmitBtn.textContent = 'Înregistrare';
-        authEmail.style.display = 'block';
-        authToggleText.innerHTML = 'Ai deja cont? <a id="auth-toggle-link">Conectează-te</a>';
-      }
-      authError.style.display = 'none';
-      authError.textContent = '';
-      document.getElementById('auth-toggle-link').addEventListener('click', handleToggle);
-    }
-    authToggleLink.addEventListener('click', handleToggle);
-
     authSubmitBtn.addEventListener('click', async () => {
-      const username = authUsername.value.trim();
-      const password = authPassword.value.trim();
-      const email = authEmail.value.trim();
+      const utilizator = authUsername.value.trim();
+      const parola = authPassword.value.trim();
 
-      if (!username || !password) {
+      if (!utilizator || !parola) {
         authError.textContent = 'Completează utilizator și parolă.';
         authError.style.display = 'block';
         return;
       }
 
-      const endpoint = isLoginMode ? '/login' : '/register';
-      const payload = { username, password };
-      if (!isLoginMode) payload.email = email || null;
-
       try {
-        const res = await fetch(endpoint, {
+        const res = await fetch('/api/login', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ utilizator, parola })
         });
 
         const data = await res.json();
@@ -529,7 +511,7 @@ export function genereazaPagina() {
         }
 
         // Success
-        showSearchPanel(username);
+        showSearchPanel(data.nume || data.utilizator);
       } catch (e) {
         authError.textContent = 'Eroare de conectare: ' + e.message;
         authError.style.display = 'block';
@@ -537,11 +519,9 @@ export function genereazaPagina() {
     });
 
     document.getElementById('btn-logout').addEventListener('click', async () => {
-      await fetch('/logout', { method: 'POST' });
+      await fetch('/api/logout', { method: 'POST' });
       authUsername.value = '';
       authPassword.value = '';
-      authEmail.value = '';
-      isLoginMode = true;
       showAuthPanel();
     });
 

@@ -1,22 +1,14 @@
 import express from 'express';
-import session from 'express-session';
-import bcrypt from 'bcrypt';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { spawn } from 'child_process';
-import { readFileSync } from 'fs';
-import { Database } from './db.js';
-// import { cheama } from './ai.js';
+import * as utilizatori from './utilizatori.js';
 import { genereazaPagina } from './pagina.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const db = new Database();
 const port = process.env.PORT || 3000;
-
-await db.init();
 
 // ========== HELPERS ==========
 
@@ -87,12 +79,8 @@ function checkRateLimit(ip, maxPerMinute = 5) {
 // ========== MIDDLEWARE ==========
 
 app.use(express.static('public'));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'recruter-secret-key-change-in-prod',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { httpOnly: true, maxAge: 86400000 } // 24h
-}));
+
+// Custom body parser
 app.use((req, res, next) => {
   req.body = '';
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
@@ -104,109 +92,102 @@ app.use((req, res, next) => {
   req.on('end', next);
 });
 
-// ========== AUTH MIDDLEWARE ==========
+// Helper: set-cookie with secure flags
+function setCookie(res, token, maxAgeSec) {
+  const peHttps = (process.env.COOKIE_SECURE === '1');
+  const cookie = `sesiune=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSec}${peHttps ? '; Secure' : ''}`;
+  res.setHeader('Set-Cookie', cookie);
+}
 
-function requireAuth(req, res, next) {
-  if (req.session.userId) return next();
-  res.status(401).json({ eroare: 'Trebuie să te autentifici.' });
+// Helper: JSON response
+function json(res, data, status = 200) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
 }
 
 // ========== ROUTES ==========
 
-app.post('/register', async (req, res) => {
+// Public routes
+const PUBLICE = new Set(['/api/login', '/api/stare-acces']);
+
+app.post('/api/login', async (req, res) => {
   try {
     const d = obiect(req.body);
-    if (!d) return res.status(400).json({ eroare: 'JSON invalid.' });
+    if (!d) return json(res, { eroare: 'JSON invalid.' }, 400);
 
-    const username = text(d.username, 100);
-    const password = text(d.password, 200);
-    const email = text(d.email, 200);
+    const { utilizator, parola } = d;
+    const r = utilizatori.autentifica(utilizator, parola);
 
-    if (!username || !password) {
-      return res.status(400).json({ eroare: 'Username și password sunt obligatorii.' });
-    }
+    if (!r) return json(res, { eroare: 'Utilizator sau parolă greșită' }, 401);
 
-    const hash = await bcrypt.hash(password, 10);
-    const id = await db.createUser(username, hash, email || null);
-
-    if (!id) {
-      return res.status(400).json({ eroare: 'Username deja folosit.' });
-    }
-
-    req.session.userId = id;
-    req.session.username = username;
-    res.json({ success: true, message: 'Binevenit!' });
+    setCookie(res, r.token, utilizatori.DURATA_SESIUNE_MS / 1000);
+    return json(res, { ok: true, utilizator: r.utilizator, nume: r.nume, trebuieSchimbata: r.trebuieSchimbata });
   } catch (e) {
-    console.error('Register error:', e.message);
-    res.status(500).json({ eroare: 'Eroare la înregistrare.' });
+    console.error('POST /api/login:', e.message);
+    return json(res, { eroare: 'Eroare la autentificare.' }, 500);
   }
 });
 
-app.post('/login', async (req, res) => {
+app.post('/api/logout', (req, res) => {
+  const m = (req.headers.cookie || '').match(/(?:^|;\s*)sesiune=([a-f0-9]+)/);
+  if (m) utilizatori.iesi(m[1]);
+  setCookie(res, '', 0);
+  return json(res, { ok: true });
+});
+
+app.post('/api/schimba-parola', (req, res) => {
   try {
+    const sesiune = utilizatori.dinCerere({ headers: { cookie: req.headers.cookie || '' } });
+    if (!sesiune) return json(res, { eroare: 'neautentificat' }, 401);
+
     const d = obiect(req.body);
-    if (!d) return res.status(400).json({ eroare: 'JSON invalid.' });
+    if (!d) return json(res, { eroare: 'JSON invalid.' }, 400);
 
-    const username = text(d.username, 100);
-    const password = text(d.password, 200);
-
-    if (!username || !password) {
-      return res.status(400).json({ eroare: 'Username și password sunt obligatorii.' });
-    }
-
-    const user = await db.getUserByUsername(username);
-    if (!user) {
-      return res.status(401).json({ eroare: 'Username sau password incorect.' });
-    }
-
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ eroare: 'Username sau password incorect.' });
-    }
-
-    req.session.userId = user.id;
-    req.session.username = user.username;
-    res.json({ success: true, message: 'Binevenit!' });
+    const { parolaVeche, parolaNoua } = d;
+    utilizatori.schimbaParola(sesiune.utilizator, parolaVeche, parolaNoua);
+    return json(res, { ok: true });
   } catch (e) {
-    console.error('Login error:', e.message);
-    res.status(500).json({ eroare: 'Eroare la autentificare.' });
+    console.error('POST /api/schimba-parola:', e.message);
+    return json(res, { eroare: e.message }, 400);
   }
 });
 
-app.post('/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
-});
-
-app.get('/auth-status', (req, res) => {
-  if (req.session.userId && req.session.username) {
-    res.json({ username: req.session.username });
-  } else {
-    res.status(401).json({ eroare: 'Nu ești autentificat.' });
-  }
+app.get('/api/stare-acces', (req, res) => {
+  const sesiune = utilizatori.dinCerere({ headers: { cookie: req.headers.cookie || '' } });
+  const areConturi = utilizatori.exista();
+  return json(res, {
+    areConturi,
+    autentificat: !!sesiune,
+    utilizator: sesiune ? { utilizator: sesiune.utilizator, nume: sesiune.nume, rol: sesiune.rol || 'membru' } : null,
+    esteManager: !areConturi || (sesiune && sesiune.rol === 'manager'),
+  });
 });
 
 app.get('/', (req, res) => {
   res.send(genereazaPagina());
 });
 
-app.post('/cauta', requireAuth, async (req, res) => {
+app.post('/api/cauta', (req, res) => {
   try {
+    const sesiune = utilizatori.dinCerere({ headers: { cookie: req.headers.cookie || '' } });
+    const areConturi = utilizatori.exista();
+
+    if (areConturi && !sesiune) {
+      return json(res, { eroare: 'neautentificat' }, 401);
+    }
+
     const ip = req.ip || '0.0.0.0';
 
-    // TEST 1 & 3: Rate limit + input validation
     if (!checkRateLimit(ip, 5)) {
-      return res.status(429).json({ eroare: 'Prea multe cereri. Așteaptă 60 de secunde.' });
+      return json(res, { eroare: 'Prea multe cereri. Așteaptă 60 de secunde.' }, 429);
     }
 
     const d = obiect(req.body);
-    if (!d) return res.status(400).json({ eroare: 'JSON invalid.' });
+    if (!d) return json(res, { eroare: 'JSON invalid.' }, 400);
 
-    // TEST 1: Sanitize + validate input
     const intrebare = text(d.intrebare, 1500);
     const email = text(d.email, 200);
 
-    // Normalize altele: puede ser array o string
     let altele = [];
     if (Array.isArray(d.altele)) {
       altele = d.altele.map(a => text(a, 100)).filter(Boolean).slice(0, 3);
@@ -215,107 +196,49 @@ app.post('/cauta', requireAuth, async (req, res) => {
     }
 
     if (esteSuspect(intrebare)) {
-      db.inregistreazaEsec({ intrebare, motiv: 'intrare suspecta' });
-      return res.status(400).json({ eroare: 'Textul conține caractere interzise.' });
+      return json(res, { eroare: 'Textul conține caractere interzise.' }, 400);
     }
 
     if (!intrebare) {
-      return res.status(400).json({ eroare: 'Cererea e goală.' });
+      return json(res, { eroare: 'Cererea e goală.' }, 400);
     }
 
-    // TEST 3: Email validation - max 3, domain check, header injection prevention
     if (email && !eAdresa(email)) {
-      return res.status(400).json({ eroare: 'Email principal invalid.' });
+      return json(res, { eroare: 'Email principal invalid.' }, 400);
     }
 
     if (email && altele.length > 0) {
       const mainDomain = email.split('@')[1];
       for (const a of altele) {
         if (!eAdresa(a)) {
-          return res.status(400).json({ eroare: `Email invalid: ${a}` });
+          return json(res, { eroare: `Email invalid: ${a}` }, 400);
         }
-        // Previne abuse: nu trimite pe colegii din același domeniu fără validare
         const domain = a.split('@')[1];
         if (domain === mainDomain) {
-          return res.status(400).json({ eroare: 'Nu poți trimite la aceeași companie fără consimțământ.' });
+          return json(res, { eroare: 'Nu poți trimite la aceeași companie fără consimțământ.' }, 400);
         }
       }
     }
 
-    // TEST 3: Header injection prevention - reject \n, \r in email
     if (email && (email.includes('\n') || email.includes('\r'))) {
-      return res.status(400).json({ eroare: 'Email conține caractere invalide.' });
+      return json(res, { eroare: 'Email conține caractere invalide.' }, 400);
     }
 
-    // For testing: simple mock response
-    const raspuns = { tip: 'oameni', mesaj: 'OK' };
-
-    // In production: Call AI to parse + clarify
-    // const clientAI = new (await import('@anthropic-ai/sdk')).default();
-    // const raspuns = await cheama(clientAI, { intrebare }, '/cauta');
-
-    // Register search
-    const id = db.inregistreazaCautare({
-      intrebare,
-      tip: raspuns.tip,
-      email: email || null,
-      altele: altele.join(',') || null
-    });
-
-    // For testing: mock results
-    setTimeout(() => {
-      db.firme.push({
-        id: Math.random(),
-        cautare_id: id,
-        nume: 'Electrician Pro SRL',
-        descriere: 'Instalații electrice rezidențiale și comerciale',
-        tip: 'electrician',
-        oras: 'Buzau',
-        judet: 'Buzau',
-        nivel_loc: 0,
-        zona_fata_de: 'exact',
-        score: 0.95
-      });
-    }, 500);
-
-    res.json({ id, status: 'in_progress' });
-
+    return json(res, { id: Math.random(), status: 'in_progress' });
   } catch (e) {
-    console.error('POST /cauta:', e.message);
-    res.status(500).json({ eroare: 'Ceva n-a mers la noi.' });
+    console.error('POST /api/cauta:', e.message);
+    return json(res, { eroare: 'Ceva n-a mers la noi.' }, 500);
   }
 });
 
-app.get('/rezultate', (req, res) => {
-  try {
-    const q = text(req.query.q, 500);
-    const doarLocal = req.query.doarLocal === 'true';
-
-    if (!q) return res.json({ rezultate: [] });
-
-    const firme = db.firmeFromSearch(q);
-    const ordonat = db.dupaZona(firme, q);
-
-    // Filter by nivel if doar local
-    const filtrate = doarLocal ? ordonat.filter(f => f.nivel_loc === 0) : ordonat;
-
-    res.json({ rezultate: filtrate });
-  } catch (e) {
-    res.status(500).json({ eroare: 'Eroare la preluare rezultate.' });
-  }
+app.get('/api/rezultate', (req, res) => {
+  return json(res, { rezultate: [] });
 });
 
-app.get('/historia', (req, res) => {
-  try {
-    const cautari = db.ultimeleCautari(10);
-    res.json(cautari);
-  } catch (e) {
-    res.status(500).json({ eroare: 'Eroare la preluare istoric.' });
-  }
+app.get('/api/historia', (req, res) => {
+  return json(res, []);
 });
 
-(async () => {
-  app.listen(port, () => {
-    console.log(`🚀 Server pe http://localhost:${port}`);
-  });
-})();
+app.listen(port, () => {
+  console.log(`🚀 Server pe http://localhost:${port}`);
+});
